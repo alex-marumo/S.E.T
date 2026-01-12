@@ -10,14 +10,14 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 CSV_FILE = "bankstatementconverter.com.csv"
 
-st.set_page_config(page_title="Smart.Expense.Tracker", layout="wide")
+st.set_page_config(page_title="Smart Expense Tracker", layout="wide")
 
 # 2. CORE FUNCTIONS
 def predict_category(description):
     """Predicts category using keywords first, then AI fallback."""
     if not description: return "Others"
     
-    # Keyword Scout (Free)
+    # Keyword Scouting
     keywords = {
         'Food': ['restaurant', 'cafe', 'uber eats', 'mcdonalds', 'pizza', 'grocery', 'kfc', 'food'],
         'Transportation': ['uber', 'bolt', 'train', 'fuel', 'shell', 'parking', 'taxi'],
@@ -44,42 +44,27 @@ def predict_category(description):
         return "Others"
 
 def load_and_clean_data():
+    """Loads CSV and ensures columns are clean and deduplicated."""
     if not os.path.exists(CSV_FILE):
         return pd.DataFrame(columns=["Date", "Description", "Amount", "Category"])
-    # Load and strip spaces from headers
+    
     df = pd.read_csv(CSV_FILE)
     df.columns = df.columns.str.strip()
-    # Remove duplicate columns
     df = df.loc[:, ~df.columns.duplicated()]
-
-    # UNIFY THE DATA: Convert Debit/Credit to a single 'Amount' if they exist
-    if 'Amount' not in df.columns:
-        if 'Credit' in df.columns and 'Debit' in df.columns:
-            # Credit is money in, Debit is money out. We want the absolute value for 'Amount'
-            df['Amount'] = df['Credit'].fillna(df['Debit'])
-        else:
-            # If neither exists, create an empty Amount column
-            df['Amount'] = 0
-
-    # Clean the 'Description' column
+    
+    # Standardize columns for visualization
+    if 'Credit' in df.columns and 'Debit' in df.columns:
+        df['Amount'] = df['Credit'].fillna(df['Debit'])
+    
+    # Ensure numeric and drop junk
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
     if 'Description' not in df.columns and 'Note' in df.columns:
         df['Description'] = df['Note']
-
-    # SANITIZE: Remove rows without a Date or Amount (like "Opening Balance" rows)
-    df = df.dropna(subset=['Date'])
-    
-    # FORCE NUMERIC: Ensure Amount is a float, not text
-    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-    
-    # Standardize Categories (No "Utilities " vs "Utilities")
-    if 'Category' in df.columns:
-        df['Category'] = df['Category'].fillna('Others').astype(str).str.strip()
-
-    # Return only the columns the App actually cares about
-    return df[["Date", "Description", "Amount", "Category"]]
+        
+    return df
 
 # 3. STREAMLIT UI
-st.title("S.E.T")
+st.title("Smart.Expense.Tracker")
 
 data = load_and_clean_data()
 
@@ -94,15 +79,15 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.subheader("Add New Entry")
-    # Step 1: Trigger Prediction
+    # Trigger Prediction
     desc_input = st.text_input("Transaction Description (e.g., 'Netflix Subscription')")
     
-    # We only predict if user typed something
+    # Only predict if user typed something
     suggested = predict_category(desc_input) if desc_input else ""
     
     with st.form("entry_form", clear_on_submit=True):
         date = st.date_input("Date")
-        # Step 2: Form captures everything
+        # Form captures everything
         final_desc = st.text_input("Confirmed Description", value=desc_input)
         amount = st.number_input("Amount", min_value=0.0, step=0.01)
         category = st.text_input("Category", value=suggested)
@@ -119,7 +104,7 @@ with col1:
             else:
                 st.warning("Please provide a description and amount.")
 
-# 4. VISUALIZATION
+# VISUALIZATION
 with col2:
     st.subheader("Spending Analysis")
     # Filter for valid expenses only
